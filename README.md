@@ -7,6 +7,7 @@ Exchange Online (Office 365) PowerShell scripts for multi-tenant environment con
 - Domain-specific Address Book Policies (ABP) for tenant isolation
 - Catch-all mail routing for unrecognized addresses
 - Batch processing for multiple domains
+- Secure configuration via .env file
 
 ## Prerequisites
 
@@ -26,15 +27,16 @@ Get-Module -Name ExchangeOnlineManagement -ListAvailable
 
 ## Configuration
 
-Edit the configuration section in `Exc-Setup.ps1`:
+1. Copy `.env.example` to `.env`
+2. Edit `.env` with your values:
 
-| Variable         | Description                          | Example                              |
-|------------------|--------------------------------------|--------------------------------------|
-| `$anaDomain`     | Primary tenant domain                | `contoso.onmicrosoft.com`            |
-| `$adminUser`     | Admin account UPN                    | `admin@contoso.onmicrosoft.com`      |
-| `$domainListFile`| Path to domain list file             | `C:\domains.txt`                     |
-| `$catchAllPrefix`| Catch-all group prefix               | `catchall`                           |
-| `$redirectUser`  | User to receive unmatched mail       | `postmaster`                         |
+| Variable           | Description                    | Example                         |
+|--------------------|--------------------------------|---------------------------------|
+| `TENANT_DOMAIN`    | Primary tenant domain          | `contoso.onmicrosoft.com`       |
+| `ADMIN_USER`       | Admin account UPN              | `admin@contoso.onmicrosoft.com` |
+| `DOMAIN_LIST_FILE` | Path to domain list file       | `C:\domains.txt`                |
+| `CATCHALL_PREFIX`  | Catch-all group prefix         | `catchall`                      |
+| `REDIRECT_USER`    | User to receive unmatched mail | `postmaster`                    |
 
 ## Domain List File
 
@@ -71,12 +73,14 @@ This script performs both ABP and catch-all configuration for each domain.
 For each domain, the script creates:
 
 ### Address Book Policy Components
+
 - Global Address List: `Default {domain} Global Address List`
 - Address Lists: Distribution Lists, Rooms, Users
 - Offline Address Book: `{domain} Offline Address Book`
 - Address Book Policy: `{domain} ABP`
 
 ### Catch-All Components
+
 - Dynamic Distribution Group: `Yakala DynDistGroup - {domain}`
 - Transport Rule: `Yakala TransRule - {domain}`
 
@@ -88,7 +92,7 @@ For each domain, the script creates:
 # Clear existing sessions
 Get-PSSession | Remove-PSSession
 
-# Reconnect
+# Reconnect manually if needed
 Connect-ExchangeOnline -UserPrincipalName admin@tenant.onmicrosoft.com
 ```
 
