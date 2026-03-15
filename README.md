@@ -11,11 +11,13 @@ Exchange Online (Office 365) PowerShell scripts for multi-tenant environment con
 
 ## Prerequisites
 
-- Windows PowerShell 5.1 or PowerShell 7+
+- Windows PowerShell 5.1 or PowerShell 7+ (cross-platform)
 - Exchange Online admin credentials
 - ExchangeOnlineManagement module v3.0.0
 
 ## Installation
+
+### Windows
 
 ```powershell
 # Install the required module
@@ -23,6 +25,19 @@ Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.0.0
 
 # Verify installation
 Get-Module -Name ExchangeOnlineManagement -ListAvailable
+```
+
+### macOS
+
+```bash
+# Install PowerShell via Homebrew
+brew install powershell
+
+# Launch PowerShell
+pwsh
+
+# Install the required module (inside pwsh)
+Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.0.0
 ```
 
 ## Configuration
@@ -34,7 +49,7 @@ Get-Module -Name ExchangeOnlineManagement -ListAvailable
 |--------------------|--------------------------------|---------------------------------|
 | `TENANT_DOMAIN`    | Primary tenant domain          | `contoso.onmicrosoft.com`       |
 | `ADMIN_USER`       | Admin account UPN              | `admin@contoso.onmicrosoft.com` |
-| `DOMAIN_LIST_FILE` | Path to domain list file       | `C:\domains.txt`                |
+| `DOMAIN_LIST_FILE` | Path to domain list file       | `C:\domains.txt` or `/path/to/domains.txt` |
 | `CATCHALL_PREFIX`  | Catch-all group prefix         | `catchall`                      |
 | `REDIRECT_USER`    | User to receive unmatched mail | `postmaster`                    |
 

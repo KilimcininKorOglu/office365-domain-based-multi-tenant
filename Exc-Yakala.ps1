@@ -16,7 +16,9 @@ Get-Content $envFile | ForEach-Object {
     }
 }
 
-Set-ExecutionPolicy Unrestricted
+if ($IsWindows) {
+    Set-ExecutionPolicy Unrestricted -Scope Process -Force
+}
 
 Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.0.0
 

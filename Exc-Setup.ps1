@@ -28,7 +28,9 @@ $redirectUser = $REDIRECT_USER
 # ============================================
 # MODULE SETUP
 # ============================================
-Set-ExecutionPolicy Unrestricted -Scope Process -Force
+if ($IsWindows) {
+    Set-ExecutionPolicy Unrestricted -Scope Process -Force
+}
 Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.0.0 -Force -AllowClobber
 Import-Module ExchangeOnlineManagement
 
