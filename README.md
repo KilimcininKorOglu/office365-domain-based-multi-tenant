@@ -1,6 +1,6 @@
 # Exchange Online Multi-Tenant Setup
 
-Exchange Online (Office 365) PowerShell scripts for multi-tenant environment configuration.
+Exchange Online (Office 365) PowerShell scripts for domain based multi-tenant environment configuration.
 
 ## Features
 
