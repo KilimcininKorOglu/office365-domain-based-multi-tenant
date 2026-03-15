@@ -45,13 +45,13 @@ Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.0.0
 1. Copy `.env.example` to `.env`
 2. Edit `.env` with your values:
 
-| Variable           | Description                    | Example                         |
-|--------------------|--------------------------------|---------------------------------|
-| `TENANT_DOMAIN`    | Primary tenant domain          | `contoso.onmicrosoft.com`       |
-| `ADMIN_USER`       | Admin account UPN              | `admin@contoso.onmicrosoft.com` |
+| Variable           | Description                    | Example                                    |
+|--------------------|--------------------------------|--------------------------------------------|
+| `TENANT_DOMAIN`    | Primary tenant domain          | `contoso.onmicrosoft.com`                  |
+| `ADMIN_USER`       | Admin account UPN              | `admin@contoso.onmicrosoft.com`            |
 | `DOMAIN_LIST_FILE` | Path to domain list file       | `C:\domains.txt` or `/path/to/domains.txt` |
-| `CATCHALL_PREFIX`  | Catch-all group prefix         | `catchall`                      |
-| `REDIRECT_USER`    | User to receive unmatched mail | `postmaster`                    |
+| `CATCHALL_PREFIX`  | Catch-all group prefix         | `catchall`                                 |
+| `REDIRECT_USER`    | User to receive unmatched mail | `postmaster`                               |
 
 ## Domain List File
 

@@ -66,7 +66,7 @@ foreach ($domain in [System.IO.File]::ReadLines($domainListFile)) {
     New-AddressList -Name "All $domain Rooms" -RecipientFilter {
         ((Alias -ne $null) -and
         (((RecipientDisplayType -eq 'ConferenceRoomMailbox') -or
-          (RecipientDisplayType -eq 'SyncedConferenceRoomMailbox'))) -and
+            (RecipientDisplayType -eq 'SyncedConferenceRoomMailbox'))) -and
         (WindowsEmailAddress -like "*@$domain"))
     }
 
@@ -74,10 +74,10 @@ foreach ($domain in [System.IO.File]::ReadLines($domainListFile)) {
     New-AddressList -Name "All $domain Users" -RecipientFilter {
         ((Alias -ne $null) -and
         (((((((ObjectCategory -like 'person') -and (ObjectClass -eq 'user') -and
-              (-not(Database -ne $null)) -and (-not(ServerLegacyDN -ne $null)))) -or
+                (-not(Database -ne $null)) -and (-not(ServerLegacyDN -ne $null)))) -or
             (((ObjectCategory -like 'person') -and (ObjectClass -eq 'user') -and
-              (((Database -ne $null) -or (ServerLegacyDN -ne $null))))))) -and
-          (-not(RecipientTypeDetailsValue -eq 'GroupMailbox')))) -and
+                (((Database -ne $null) -or (ServerLegacyDN -ne $null))))))) -and
+        (-not(RecipientTypeDetailsValue -eq 'GroupMailbox')))) -and
         (WindowsEmailAddress -like "*@$domain"))
     }
 

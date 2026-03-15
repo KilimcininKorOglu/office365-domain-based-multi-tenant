@@ -50,4 +50,4 @@ foreach($domain in [System.IO.File]::ReadLines($DOMAIN_LIST_FILE))
 
     Get-Recipient -Filter '(EmailAddresses -like "*@$domain") -and (recipienttypedetails -eq "usermailbox")'
 
- }
+}

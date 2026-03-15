@@ -46,4 +46,4 @@ foreach($domain in [System.IO.File]::ReadLines($DOMAIN_LIST_FILE))
 
     New-TransportRule -Name "Yakala TransRule - $domain" -RecipientDomainIs $domain -FromScope NotInOrganization -ExceptIfSentToMemberOf $GroupName -RedirectMessageTo $redirectmail
 
- }
+}
