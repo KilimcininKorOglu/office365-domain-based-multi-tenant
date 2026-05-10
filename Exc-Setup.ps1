@@ -34,10 +34,19 @@ if ($IsWindows) {
 Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.0.0 -Force -AllowClobber
 Import-Module ExchangeOnlineManagement
 
+. (Join-Path $PSScriptRoot "_Exc-Connect.ps1")
+
 # ============================================
 # CONNECT TO EXCHANGE ONLINE
 # ============================================
-Connect-ExchangeOnline -UserPrincipalName $adminUser -ShowProgress $true
+Connect-ExoSmart `
+    -AdminUser        $adminUser `
+    -TenantDomain     $anaDomain `
+    -AuthMode         $AUTH_MODE `
+    -AppId            $APP_ID `
+    -CertPfxPath      $CERT_PFX_PATH `
+    -CertPfxPassword  $CERT_PFX_PASSWORD `
+    -UseDeviceCode    $USE_DEVICE_CODE
 
 # ============================================
 # PROCESS EACH DOMAIN
@@ -123,5 +132,5 @@ Write-Host "`n========================================" -ForegroundColor Magenta
 Write-Host "All domains processed successfully!" -ForegroundColor Magenta
 Write-Host "========================================" -ForegroundColor Magenta
 
-# Disconnect session
-Disconnect-ExchangeOnline -Confirm:$false
+# Disconnect session (skip if KEEP_SESSION=true)
+Disconnect-ExoIfNeeded -KeepSession $KEEP_SESSION
