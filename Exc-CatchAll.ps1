@@ -24,10 +24,19 @@ Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.0.0
 
 Import-Module ExchangeOnlineManagement
 
+. (Join-Path $PSScriptRoot "_Exc-Connect.ps1")
+
 $anaDomain = $TENANT_DOMAIN
 $adminUser = $ADMIN_USER
 
-Connect-ExchangeOnline -UserPrincipalName $adminUser -ShowProgress $true
+Connect-ExoSmart `
+    -AdminUser        $adminUser `
+    -TenantDomain     $anaDomain `
+    -AuthMode         $AUTH_MODE `
+    -AppId            $APP_ID `
+    -CertPfxPath      $CERT_PFX_PATH `
+    -CertPfxPassword  $CERT_PFX_PASSWORD `
+    -UseDeviceCode    $USE_DEVICE_CODE
 
 
 foreach($domain in [System.IO.File]::ReadLines($DOMAIN_LIST_FILE))
