@@ -1,49 +1,76 @@
 # Exchange Online Multi-Tenant Setup
 
-Exchange Online (Office 365) PowerShell scripts for domain based multi-tenant environment configuration.
+Exchange Online (Office 365) PowerShell scripts for domain-based multi-tenant environment configuration. Each accepted domain in a single tenant is isolated with its own Address Book Policy (ABP) and given catch-all mail routing for unrecognized recipients.
 
 ## Features
 
 - Domain-specific Address Book Policies (ABP) for tenant isolation
-- Catch-all mail routing for unrecognized addresses
-- Batch processing for multiple domains
-- Secure configuration via .env file
+- Catch-all mail routing for unrecognized addresses via `InternalRelay` accepted domain plus a transport rule
+- Three authentication modes: interactive (browser MFA), device code, and certificate-based (unattended)
+- Automatic domain list fetching from the tenant
+- Read-only audit reporting with CSV export
+- Forwarder forensics scanning across transport rules, mailbox forwarding, inbox rules, aliases, and distribution groups
+- Batch processing across all domains listed in a single text file
+- Secure configuration via `.env` (no credentials in source)
+- Cross-platform: PowerShell 7+ (macOS, Linux) and Windows PowerShell 5.1
+
+## Repository Layout
+
+### Scripts
+
+**`_Exc-Connect.ps1`** -- Shared connection helper, dot-sourced by every operational script. Provides `Connect-ExoSmart` (selects interactive, device-code, or certificate auth based on `AUTH_MODE`), `Test-ExoActiveSession` (reuses existing sessions), and `Disconnect-ExoIfNeeded` (skips disconnect when `KEEP_SESSION=true`). Never run directly.
+
+**`Exc-Setup.ps1`** -- Primary production script. Runs an 8-step pipeline per domain: creates GAL, three address lists, OAB, ABP, assigns ABP to all domain mailboxes, then configures catch-all (sets `InternalRelay`, creates dynamic distribution group, creates transport rule). Colored progress output. Disconnects at the end.
+
+**`Exc-Address.ps1`** -- ABP-only standalone script. Creates GAL, address lists, OAB, ABP, and assigns ABP to mailboxes for each domain. Does not configure catch-all. Historical reference; prefer `Exc-Setup.ps1`.
+
+**`Exc-CatchAll.ps1`** -- Catch-all-only standalone script. Sets each domain to `InternalRelay`, creates a dynamic distribution group (`Yakala DynDistGroup`), and creates a transport rule (`Yakala TransRule`) that redirects unmatched external mail to `REDIRECT_USER`. Historical reference; prefer `Exc-Setup.ps1`.
+
+**`Exc-Domains.ps1`** -- Connects to Exchange Online, runs `Get-AcceptedDomain`, excludes the primary tenant domain, sorts and deduplicates, backs up the existing file as `.bak`, and writes the result to `DOMAIN_LIST_FILE`. Run this before `Exc-Setup.ps1` to auto-populate the domain list.
+
+**`Exc-Report.ps1`** -- Read-only audit script. For each domain in `DOMAIN_LIST_FILE`, probes whether GAL, address lists, OAB, ABP, dynamic distribution group, and transport rule exist. Prints a formatted console summary with counters (fully configured / ABP-only / catch-all-only / untouched) and exports a timestamped CSV (`exc-report-YYYYMMDD-HHMMSS.csv`). Creates and modifies nothing.
+
+**`Exc-FindForwarder.ps1`** -- Read-only forwarder forensics scanner. Searches five surfaces (transport rules, mailbox `ForwardingAddress`/`ForwardingSmtpAddress`, inbox rules including hidden ones, recipient email aliases, and distribution group memberships) for case-insensitive substring matches against a hardcoded suspects list. Outputs a grouped console table and a timestamped CSV (`exc-forwarder-YYYYMMDD-HHMMSS.csv`).
+
+**`Exc-CertSetup.ps1`** -- One-time certificate bootstrap. Generates a 2048-bit RSA self-signed certificate (2-year validity) using cross-platform .NET `CertificateRequest` APIs. Exports PFX (private key) and CER (public key) to `certs/`. Prompts for a PFX password with confirmation. Sets `chmod 600` on POSIX. Prints the Azure AD setup steps. Does not contact Exchange Online.
+
+### Other Files
+
+| File           | Purpose                                                         |
+|----------------|----------------------------------------------------------------|
+| `.env.example` | Configuration template; copy to `.env` and fill in values.     |
+| `.env`         | Runtime configuration with credentials (gitignored).           |
+| `domains.txt`  | Domain list file, one domain per line (gitignored).            |
+| `certs/`       | PFX and CER certificate storage directory (gitignored).        |
 
 ## Prerequisites
 
-- Windows PowerShell 5.1 or PowerShell 7+ (cross-platform)
-- Exchange Online admin credentials
-- ExchangeOnlineManagement module v3.0.0
+- PowerShell 7+ (cross-platform) or Windows PowerShell 5.1
+- Exchange Online administrator credentials (interactive/device mode) or an Azure AD App Registration with `Exchange.ManageAsApp` permission (certificate mode)
+- `ExchangeOnlineManagement` module v3.0.0
 
 ## Installation
 
 ### Windows
 
 ```powershell
-# Install the required module
 Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.0.0
-
-# Verify installation
 Get-Module -Name ExchangeOnlineManagement -ListAvailable
 ```
 
-### macOS
+### macOS / Linux
 
 ```bash
-# Install PowerShell via Homebrew
 brew install powershell
-
-# Launch PowerShell
-pwsh
-
-# Install the required module (inside pwsh)
-Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.0.0
+pwsh -Command "Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.0.0"
 ```
 
 ## Configuration
 
-1. Copy `.env.example` to `.env`
-2. Edit `.env` with your values:
+1. Copy `.env.example` to `.env`.
+2. Edit `.env` with your values.
+
+### Core Variables
 
 | Variable           | Description                    | Example                                    |
 |--------------------|--------------------------------|--------------------------------------------|
@@ -53,15 +80,30 @@ Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.0.0
 | `CATCHALL_PREFIX`  | Catch-all group prefix         | `catchall`                                 |
 | `REDIRECT_USER`    | User to receive unmatched mail | `postmaster`                               |
 
+### Authentication Variables
+
+| Variable            | Description                                                      | Default         |
+|---------------------|------------------------------------------------------------------|-----------------|
+| `AUTH_MODE`         | Connection method: `interactive`, `device`, or `certificate`     | `interactive`   |
+| `APP_ID`            | Azure AD App Registration client ID (certificate mode only)      |                 |
+| `CERT_PFX_PATH`     | Path to PFX file generated by `Exc-CertSetup.ps1`               |                 |
+| `CERT_PFX_PASSWORD` | Password protecting the PFX file                                 |                 |
+| `KEEP_SESSION`      | Keep Exchange session open after script finishes                 | `false`         |
+| `USE_DEVICE_CODE`   | Legacy flag; overrides `AUTH_MODE` when set to `true`            | `false`         |
+
+`.env` is parsed by the regex `^\s*([^#][^=]+)=(.*)$` and injected as script-scoped variables. Lines starting with `#` are ignored.
+
 ## Domain List File
 
-Create a text file with one domain per line:
+Create a UTF-8 text file referenced by `DOMAIN_LIST_FILE`, with one accepted domain per line:
 
 ```
 domain1.com
 domain2.com
 domain3.com
 ```
+
+Alternatively, run `Exc-Domains.ps1` to auto-populate the file from the tenant's accepted domains.
 
 ## Usage
 
@@ -71,58 +113,114 @@ domain3.com
 .\Exc-Setup.ps1
 ```
 
-This script performs both ABP and catch-all configuration for each domain.
+Runs the full eight-step pipeline per domain (ABP + catch-all) and disconnects the Exchange Online session at the end.
 
 ### Individual Scripts
 
 ```powershell
 # Address Book Policy only
-.\Exc-Adress.ps1
+.\Exc-Address.ps1
 
 # Catch-all mail routing only
-.\Exc-Yakala.ps1
+.\Exc-CatchAll.ps1
 ```
 
-## What Gets Created
+### Utility Scripts
 
-For each domain, the script creates:
+```powershell
+# Auto-populate domain list from tenant
+.\Exc-Domains.ps1
+
+# Read-only audit report (outputs CSV)
+.\Exc-Report.ps1
+
+# Forwarder forensics scan (outputs CSV)
+.\Exc-FindForwarder.ps1
+```
+
+## Certificate-Based Authentication Setup
+
+For unattended operation without browser prompts or MFA:
+
+1. Run `.\Exc-CertSetup.ps1` to generate a self-signed PFX and CER under `certs/`.
+2. In Azure AD (Entra) portal, create an App Registration (single tenant).
+3. Upload the `.cer` file under Certificates & secrets.
+4. Add API permission: Office 365 Exchange Online > Application > `Exchange.ManageAsApp`, then grant admin consent.
+5. Assign the Exchange Administrator role to the app's service principal.
+6. Set `AUTH_MODE=certificate`, `APP_ID`, `CERT_PFX_PATH`, and `CERT_PFX_PASSWORD` in `.env`.
+
+## What Gets Created Per Domain
 
 ### Address Book Policy Components
 
-- Global Address List: `Default {domain} Global Address List`
-- Address Lists: Distribution Lists, Rooms, Users
-- Offline Address Book: `{domain} Offline Address Book`
-- Address Book Policy: `{domain} ABP`
+| Resource              | Naming Pattern                         |
+|-----------------------|----------------------------------------|
+| Global Address List   | `Default {domain} Global Address List` |
+| Distribution Lists AL | `All {domain} Distribution Lists`      |
+| Rooms Address List    | `All {domain} Rooms`                   |
+| Users Address List    | `All {domain} Users`                   |
+| Offline Address Book  | `{domain} Offline Address Book`        |
+| Address Book Policy   | `{domain} ABP`                         |
+| Mailbox assignment    | All `UserMailbox` recipients in domain |
+
+Each address list is filtered by `WindowsEmailAddress -like "*@$domain"` so tenants stay visually isolated from one another inside the same Exchange Online tenant.
 
 ### Catch-All Components
 
-- Dynamic Distribution Group: `Yakala DynDistGroup - {domain}`
-- Transport Rule: `Yakala TransRule - {domain}`
+| Resource                   | Naming Pattern                   |
+|----------------------------|----------------------------------|
+| Accepted-domain change     | `DomainType = InternalRelay`     |
+| Dynamic Distribution Group | `Yakala DynDistGroup - {domain}` |
+| Group SMTP address         | `{CATCHALL_PREFIX}@{domain}`     |
+| Transport Rule             | `Yakala TransRule - {domain}`    |
+| Redirect target            | `{REDIRECT_USER}@{domain}`       |
+
+The transport rule fires only for messages with `FromScope = NotInOrganization` whose recipient domain matches and whose recipient is not a member of the dynamic group, then redirects them to the configured `REDIRECT_USER`.
 
 ## Troubleshooting
 
 ### Connection Issues
 
 ```powershell
-# Clear existing sessions
-Get-PSSession | Remove-PSSession
+# Force-close any stuck Exchange Online sessions
+Disconnect-ExchangeOnline -Confirm:$false
 
-# Reconnect manually if needed
-Connect-ExchangeOnline -UserPrincipalName admin@tenant.onmicrosoft.com
+# Clear remaining remote sessions
+Get-PSSession | Remove-PSSession
 ```
+
+All scripts use `Connect-ExoSmart` from `_Exc-Connect.ps1`, which automatically reuses active sessions and selects the correct authentication method based on `AUTH_MODE`.
 
 ### Verify Configuration
 
 ```powershell
+# Confirm accepted-domain types after catch-all setup
+Get-AcceptedDomain | Select-Object DomainName, DomainType
+
 # List Address Book Policies
 Get-AddressBookPolicy | Format-Table Name, GlobalAddressList
 
-# List Transport Rules
-Get-TransportRule | Where-Object {$_.Name -like "Yakala*"}
+# List catch-all transport rules
+Get-TransportRule | Where-Object { $_.Name -like "Yakala*" }
 
 # Check mailbox ABP assignment
 Get-Mailbox user@domain.com | Select-Object AddressBookPolicy
 ```
+
+### Common Pitfalls
+
+- `Set-ExecutionPolicy` runs only on Windows; the scripts already guard it with `if ($IsWindows)`.
+- `RecipientFilter` uses **OPATH** syntax (Exchange Online query language), not LDAP.
+- The dynamic distribution group's SMTP address must be unique inside the tenant. Pick a `CATCHALL_PREFIX` that does not collide with existing mailboxes.
+- After changing `DomainType` to `InternalRelay`, ensure inbound MX records still terminate at Exchange Online.
+- ABP and transport rule cmdlets have no REST or Graph API equivalent; PowerShell is the only supported interface.
+
+## Security
+
+- Never commit `.env`; it is excluded by `.gitignore`.
+- PFX and CER files live in `certs/` which is gitignored. `Exc-CertSetup.ps1` sets `chmod 600` on POSIX systems.
+- CSV report files (`exc-report-*.csv`, `exc-forwarder-*.csv`) are gitignored.
+- All sensitive values must come from `.env`.
 
 ## License
 

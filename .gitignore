@@ -11,3 +11,11 @@
 # OS files
 .DS_Store
 Thumbs.db
+*.txt
+
+# Certificates and reports (never commit private keys or audit data)
+certs/
+*.pfx
+*.cer
+*.key
+*.csv
