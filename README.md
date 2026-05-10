@@ -140,14 +140,70 @@ Runs the full eight-step pipeline per domain (ABP + catch-all) and disconnects t
 
 ## Certificate-Based Authentication Setup
 
-For unattended operation without browser prompts or MFA:
+For unattended operation without browser prompts or MFA.
 
-1. Run `.\Exc-CertSetup.ps1` to generate a self-signed PFX and CER under `certs/`.
-2. In Azure AD (Entra) portal, create an App Registration (single tenant).
-3. Upload the `.cer` file under Certificates & secrets.
-4. Add API permission: Office 365 Exchange Online > Application > `Exchange.ManageAsApp`, then grant admin consent.
-5. Assign the Exchange Administrator role to the app's service principal.
-6. Set `AUTH_MODE=certificate`, `APP_ID`, `CERT_PFX_PATH`, and `CERT_PFX_PASSWORD` in `.env`.
+### Step 1 -- Generate Certificate
+
+```powershell
+.\Exc-CertSetup.ps1
+```
+
+You will be prompted for a PFX password (enter twice). The script generates two files under `certs/`:
+
+| File                                   | Content                            |
+|----------------------------------------|------------------------------------|
+| `exo-app-{tenant}.pfx`                | Private key (keep secret)          |
+| `exo-app-{tenant}.cer`                | Public key (upload to Azure)       |
+
+### Step 2 -- Create Azure AD App Registration
+
+1. Open [Microsoft Entra admin center](https://entra.microsoft.com).
+2. Navigate to **Entra ID** > **App registrations** > **New registration**.
+3. Set a name (e.g. `ExchangeOnline-Automation`).
+4. Supported account types: **Accounts in this organizational directory only** (single tenant).
+5. Leave Redirect URI empty. Click **Register**.
+6. Copy the **Application (client) ID** -- this is your `APP_ID`.
+
+### Step 3 -- Upload Certificate
+
+1. In the app registration, go to **Certificates & secrets**.
+2. Select the **Certificates** tab.
+3. Click **Upload certificate** and select the `.cer` file from `certs/`.
+
+### Step 4 -- Add API Permission
+
+1. Go to **API permissions** > **Add a permission**.
+2. Select the **APIs my organization uses** tab.
+3. Search for and select **Office 365 Exchange Online**.
+4. Select **Application permissions**.
+5. Expand **Exchange** and check **Exchange.ManageAsApp**.
+6. Click **Add permissions**.
+7. Click **Grant admin consent for {your tenant}** and confirm with **Yes**.
+
+### Step 5 -- Assign Exchange Administrator Role
+
+1. In the Entra admin center, go to **Entra ID** > **Roles & admins**.
+2. Search for and click **Exchange Administrator**.
+3. Click **Add assignments**.
+4. Search for your app name (e.g. `ExchangeOnline-Automation`).
+5. Select the entry with your `APP_ID` and click **Add**.
+
+### Step 6 -- Configure .env
+
+```ini
+AUTH_MODE=certificate
+APP_ID=<Application (client) ID from Step 2>
+CERT_PFX_PATH=./certs/exo-app-{tenant}.pfx
+CERT_PFX_PASSWORD=<the password you chose in Step 1>
+```
+
+### Verify
+
+```powershell
+.\Exc-Report.ps1
+```
+
+The script should connect without opening a browser or prompting for MFA.
 
 ## What Gets Created Per Domain
 
