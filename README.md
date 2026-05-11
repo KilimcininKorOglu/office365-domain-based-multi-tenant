@@ -10,6 +10,10 @@ Exchange Online (Office 365) PowerShell scripts for domain-based multi-tenant en
 - Automatic domain list fetching from the tenant
 - Read-only audit reporting with CSV export
 - Forwarder forensics scanning across transport rules, mailbox forwarding, inbox rules, aliases, and distribution groups
+- DNS record validation against Microsoft expected values (MX, SPF, Autodiscover, DKIM, DMARC)
+- Bulk authenticated SMTP enablement for all tenant mailboxes
+- Cloudflare DNS sync with dry-run safety mode
+- Bidirectional domain sync between Cloudflare and Exchange Online (add new, flag stale)
 - Batch processing across all domains listed in a single text file
 - Secure configuration via `.env` (no credentials in source)
 - Cross-platform: PowerShell 7+ (macOS, Linux) and Windows PowerShell 5.1
@@ -32,22 +36,34 @@ Exchange Online (Office 365) PowerShell scripts for domain-based multi-tenant en
 
 **`Exc-FindForwarder.ps1`** -- Read-only forwarder forensics scanner. Searches five surfaces (transport rules, mailbox `ForwardingAddress`/`ForwardingSmtpAddress`, inbox rules including hidden ones, recipient email aliases, and distribution group memberships) for case-insensitive substring matches against a hardcoded suspects list. Outputs a grouped console table and a timestamped CSV (`exc-forwarder-YYYYMMDD-HHMMSS.csv`).
 
+**`Exc-DnsCheck.ps1`** -- DNS record validation. Connects to Exchange Online to fetch real expected values (`Get-DkimSigningConfig` for DKIM CNAME targets, `Get-AcceptedDomain` for domain types), then queries actual DNS via `dig` (macOS/Linux) or `Resolve-DnsName` (Windows). Checks MX, SPF, Autodiscover CNAME, DKIM selector1/selector2 CNAMEs, and DMARC TXT for each domain. Outputs a timestamped CSV (`exc-dnscheck-YYYYMMDD-HHMMSS.csv`). Read-only.
+
+**`Exc-SmtpAuth.ps1`** -- Enables authenticated SMTP (port 587) for all user mailboxes. Checks and enables the organization-level setting (`Set-TransportConfig -SmtpClientAuthenticationDisabled $false`), then iterates every `UserMailbox` and sets `Set-CASMailbox -SmtpClientAuthenticationDisabled $false`. Skips mailboxes already enabled. Outputs a timestamped CSV (`exc-smtpauth-YYYYMMDD-HHMMSS.csv`).
+
+**`Exc-CloudflareDns.ps1`** -- Syncs Microsoft 365 DNS records to Cloudflare. Connects to Exchange Online for DKIM config, then uses the Cloudflare API to create or update MX, SPF (TXT), Autodiscover (CNAME), DKIM (CNAME x2), and DMARC (TXT) records for each domain. Supports both Global API Key (`X-Auth-Key` + `X-Auth-Email`) and API Token (`Bearer`) auth. `DRY_RUN=true` (default) previews changes without applying.
+
+**`Exc-Sync.ps1`** -- Bidirectional domain sync between Cloudflare and Exchange Online. Compares Cloudflare zones with Exchange accepted domains. Subdomain-aware: `host.example.com` is not flagged as stale if `example.com` exists in Cloudflare. Three modes:
+- `SYNC_MODE=report` (default) -- shows differences only.
+- `SYNC_MODE=apply` -- adds new domains to Exchange with full 8-step ABP + catch-all setup, updates `domains.txt`.
+- `SYNC_MODE=remove` -- moves mailboxes on stale domains to the tenant domain (`Set-Mailbox -WindowsEmailAddress`), removes ABP, address lists, OAB, transport rules, dynamic distribution groups, and the accepted domain. Outputs a timestamped CSV (`exc-sync-YYYYMMDD-HHMMSS.csv`).
+
 **`Exc-CertSetup.ps1`** -- One-time certificate bootstrap. Generates a 2048-bit RSA self-signed certificate (2-year validity) using cross-platform .NET `CertificateRequest` APIs. Exports PFX (private key) and CER (public key) to `certs/`. Prompts for a PFX password with confirmation. Sets `chmod 600` on POSIX. Prints the Azure AD setup steps. Does not contact Exchange Online.
 
 ### Other Files
 
-| File           | Purpose                                                         |
-|----------------|----------------------------------------------------------------|
-| `.env.example` | Configuration template; copy to `.env` and fill in values.     |
-| `.env`         | Runtime configuration with credentials (gitignored).           |
-| `domains.txt`  | Domain list file, one domain per line (gitignored).            |
-| `certs/`       | PFX and CER certificate storage directory (gitignored).        |
+| File           | Purpose                                                    |
+|----------------|------------------------------------------------------------|
+| `.env.example` | Configuration template; copy to `.env` and fill in values. |
+| `.env`         | Runtime configuration with credentials (gitignored).       |
+| `domains.txt`  | Domain list file, one domain per line (gitignored).        |
+| `certs/`       | PFX and CER certificate storage directory (gitignored).    |
 
 ## Prerequisites
 
 - PowerShell 7+ (cross-platform) or Windows PowerShell 5.1
 - Exchange Online administrator credentials (interactive/device mode) or an Azure AD App Registration with `Exchange.ManageAsApp` permission (certificate mode)
 - `ExchangeOnlineManagement` module v3.0.0
+- Cloudflare API Key or Token (only for `Exc-CloudflareDns.ps1` and `Exc-Sync.ps1`)
 
 ## Installation
 
@@ -82,14 +98,23 @@ pwsh -Command "Install-Module -Name ExchangeOnlineManagement -RequiredVersion 3.
 
 ### Authentication Variables
 
-| Variable            | Description                                                      | Default         |
-|---------------------|------------------------------------------------------------------|-----------------|
-| `AUTH_MODE`         | Connection method: `interactive`, `device`, or `certificate`     | `interactive`   |
-| `APP_ID`            | Azure AD App Registration client ID (certificate mode only)      |                 |
-| `CERT_PFX_PATH`     | Path to PFX file generated by `Exc-CertSetup.ps1`               |                 |
-| `CERT_PFX_PASSWORD` | Password protecting the PFX file                                 |                 |
-| `KEEP_SESSION`      | Keep Exchange session open after script finishes                 | `false`         |
-| `USE_DEVICE_CODE`   | Legacy flag; overrides `AUTH_MODE` when set to `true`            | `false`         |
+| Variable            | Description                                                  | Default       |
+|---------------------|--------------------------------------------------------------|---------------|
+| `AUTH_MODE`         | Connection method: `interactive`, `device`, or `certificate` | `interactive` |
+| `APP_ID`            | Azure AD App Registration client ID (certificate mode only)  |               |
+| `CERT_PFX_PATH`     | Path to PFX file generated by `Exc-CertSetup.ps1`            |               |
+| `CERT_PFX_PASSWORD` | Password protecting the PFX file                             |               |
+| `KEEP_SESSION`      | Keep Exchange session open after script finishes             | `false`       |
+| `USE_DEVICE_CODE`   | Legacy flag; overrides `AUTH_MODE` when set to `true`        | `false`       |
+
+### Cloudflare Variables
+
+| Variable       | Description                                                      | Default  |
+|----------------|------------------------------------------------------------------|----------|
+| `CF_API_TOKEN` | Cloudflare Global API Key or API Token                           |          |
+| `CF_EMAIL`     | Cloudflare account email (required for Global API Key auth only) |          |
+| `DRY_RUN`      | Cloudflare DNS sync mode (`true` = preview, `false` = apply)     | `true`   |
+| `SYNC_MODE`    | Domain sync mode: `report`, `apply`, or `remove`                 | `report` |
 
 `.env` is parsed by the regex `^\s*([^#][^=]+)=(.*)$` and injected as script-scoped variables. Lines starting with `#` are ignored.
 
@@ -136,6 +161,32 @@ Runs the full eight-step pipeline per domain (ABP + catch-all) and disconnects t
 
 # Forwarder forensics scan (outputs CSV)
 .\Exc-FindForwarder.ps1
+
+# DNS record validation against Microsoft expected values (outputs CSV)
+.\Exc-DnsCheck.ps1
+
+# Enable authenticated SMTP for all mailboxes (outputs CSV)
+.\Exc-SmtpAuth.ps1
+```
+
+### Cloudflare Integration
+
+```powershell
+# Preview DNS changes (dry run, no modifications)
+.\Exc-CloudflareDns.ps1
+
+# Apply DNS changes to Cloudflare (set DRY_RUN=false in .env first)
+.\Exc-CloudflareDns.ps1
+
+# Compare Cloudflare zones with Exchange domains (report mode)
+.\Exc-Sync.ps1
+
+# Add new Cloudflare domains to Exchange (set SYNC_MODE=apply in .env)
+.\Exc-Sync.ps1
+
+# Remove stale domains from Exchange (set SYNC_MODE=remove in .env)
+# Moves mailboxes to tenant domain before cleanup
+.\Exc-Sync.ps1
 ```
 
 ## Certificate-Based Authentication Setup
@@ -150,10 +201,10 @@ For unattended operation without browser prompts or MFA.
 
 You will be prompted for a PFX password (enter twice). The script generates two files under `certs/`:
 
-| File                                   | Content                            |
-|----------------------------------------|------------------------------------|
-| `exo-app-{tenant}.pfx`                | Private key (keep secret)          |
-| `exo-app-{tenant}.cer`                | Public key (upload to Azure)       |
+| File                   | Content                      |
+|------------------------|------------------------------|
+| `exo-app-{tenant}.pfx` | Private key (keep secret)    |
+| `exo-app-{tenant}.cer` | Public key (upload to Azure) |
 
 ### Step 2 -- Create Azure AD App Registration
 
@@ -275,7 +326,7 @@ Get-Mailbox user@domain.com | Select-Object AddressBookPolicy
 
 - Never commit `.env`; it is excluded by `.gitignore`.
 - PFX and CER files live in `certs/` which is gitignored. `Exc-CertSetup.ps1` sets `chmod 600` on POSIX systems.
-- CSV report files (`exc-report-*.csv`, `exc-forwarder-*.csv`) are gitignored.
+- CSV report files (`exc-report-*.csv`, `exc-forwarder-*.csv`, `exc-dnscheck-*.csv`, `exc-smtpauth-*.csv`, `exc-cloudflareDns-*.csv`, `exc-sync-*.csv`) are gitignored.
 - All sensitive values must come from `.env`.
 
 ## License
