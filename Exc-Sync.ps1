@@ -283,13 +283,15 @@ if ($syncMode -eq 'apply' -and $inCfNotExo.Count -gt 0) {
 
             New-DynamicDistributionGroup -Name $groupName `
                 -PrimarySmtpAddress $groupEmail `
-                -RecipientFilter "(WindowsEmailAddress -like '*@$domain')" `
+                -RecipientFilter "(RecipientTypeDetails -eq 'UserMailbox') -and (WindowsEmailAddress -eq '*@$domain')" `
                 -ErrorAction Stop | Out-Null
+
+            $exceptGroup = if ($CATCHALL_EXCEPT_GROUP) { $CATCHALL_EXCEPT_GROUP } else { $groupEmail }
 
             New-TransportRule -Name $ruleName `
                 -FromScope NotInOrganization `
                 -RecipientDomainIs $domain `
-                -ExceptIfSentToMemberOf $groupName `
+                -ExceptIfSentToMemberOf $exceptGroup `
                 -RedirectMessageTo $redirectTo `
                 -Priority 0 `
                 -ErrorAction Stop | Out-Null

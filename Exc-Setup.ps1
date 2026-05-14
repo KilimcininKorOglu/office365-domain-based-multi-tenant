@@ -114,13 +114,16 @@ foreach ($domain in [System.IO.File]::ReadLines($domainListFile)) {
 
     New-DynamicDistributionGroup -Name "Yakala DynDistGroup - $domain" `
         -PrimarySmtpAddress $groupName `
-        -RecipientFilter "(RecipientTypeDetails -eq 'UserMailbox') -and (WindowsEmailAddress -like '*@$domain')"
+        -RecipientFilter "(RecipientTypeDetails -eq 'UserMailbox') -and (WindowsEmailAddress -eq '*@$domain')"
+
+    $exceptGroup = if ($CATCHALL_EXCEPT_GROUP) { $CATCHALL_EXCEPT_GROUP } else { $groupName }
 
     New-TransportRule -Name "Yakala TransRule - $domain" `
         -RecipientDomainIs $domain `
         -FromScope NotInOrganization `
-        -ExceptIfSentToMemberOf $groupName `
-        -RedirectMessageTo $redirectMail
+        -ExceptIfSentToMemberOf $exceptGroup `
+        -RedirectMessageTo $redirectMail `
+        -Priority 0
 
     Write-Host "`nDomain $domain setup completed!" -ForegroundColor Green
 }
